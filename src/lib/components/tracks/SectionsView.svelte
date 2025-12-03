@@ -24,7 +24,7 @@
 						</div>
 						
 						<div class="problem-meta">
-							<span class="problem-bloks">💎 {problem.bloks} bloks</span>
+							<span class="problem-bloks">🧱 {problem.bloks} bloks</span>
 							<span class="problem-platform">{problem.external_platform}</span>
 						</div>
 						
@@ -38,23 +38,21 @@
 								Solve Problem
 							</a>
 							
-							{#if !isCompleted}
-								<button
-									class="btn-complete"
-									disabled={isSubmitting || !canCompleteNow}
-									on:click={() => onProblemComplete(problem.id)}
-								>
-									{#if isSubmitting}
-										Submitting...
-									{:else if !canCompleteNow}
-										⏱️ Cooldown Active
-									{:else}
-										Mark Complete
-									{/if}
-								</button>
-							{:else}
-								<span class="completed-badge">✓ Completed</span>
-							{/if}
+						{#if !isCompleted}
+							<button
+								class="btn-complete"
+								disabled={isSubmitting}
+								on:click={() => onProblemComplete(problem.id)}
+							>
+								{#if isSubmitting}
+									Submitting...
+								{:else}
+									Mark Complete
+								{/if}
+							</button>
+						{:else}
+							<span class="completed-badge">✓ Completed</span>
+						{/if}
 						</div>
 					</div>
 				{/each}
