@@ -20,16 +20,23 @@ export const load = async (event) => {
 	const trackName = event.params.trackName;
 	const daySlug = event.params.daySlug;
 
+	console.log('Loading day page:', { trackName, daySlug });
+
 	try {
 		// Fetch track info
 		const track = await getTrackByName(supabase, trackName);
 		
 		if (!track) {
+			console.error('Track not found:', trackName);
 			throw redirect(303, '/dashboard');
 		}
 
-		// Get all problems with user progress
-		const problemsWithProgress = await getProblemsWithProgress(supabase, user.id, track.id);
+		console.log('Track found:', track.name);
+
+		// Get all problems with user progress - correct parameter order
+		const problemsWithProgress = await getProblemsWithProgress(supabase, trackName, user.id);
+
+		console.log('Total problems loaded:', problemsWithProgress.length);
 
 		// Convert day slug to day label (e.g., "day-1" -> "Day 1")
 		const dayLabel = daySlug
@@ -37,12 +44,29 @@ export const load = async (event) => {
 			.map(word => word.charAt(0).toUpperCase() + word.slice(1))
 			.join(' ');
 
+		console.log('Looking for day:', dayLabel);
+
 		// Filter problems for this specific day
-		const dayProblems = problemsWithProgress.filter(problem => 
-			problem.section_tags?.includes(dayLabel)
-		);
+		// Database only has section_tags array (no section field)
+		const dayProblems = problemsWithProgress.filter(problem => {
+			// Check if section_tags includes this day label
+			const hasDay = problem.section_tags?.includes(dayLabel);
+			
+			if (hasDay) {
+				console.log('Problem matched:', problem.title, 'tags:', problem.section_tags);
+			}
+			return hasDay;
+		});
+
+		console.log('Day problems found:', dayProblems.length);
 
 		if (dayProblems.length === 0) {
+			console.error('No problems found for day:', dayLabel);
+			console.log('Sample problem tags:', problemsWithProgress.slice(0, 5).map(p => ({
+				title: p.title,
+				tags: p.section_tags
+			})));
+			console.log('Expected tag:', dayLabel);
 			throw redirect(303, `/tracks/${trackName}`);
 		}
 

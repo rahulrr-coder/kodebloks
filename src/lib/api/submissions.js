@@ -359,6 +359,7 @@ export async function getLastCompletedAt(supabase, userId) {
 
 /**
  * Get problems with user's completion status
+ * OPTIMIZED: Uses single query with LEFT JOIN for better performance
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase - Supabase client instance
  * @param {string} trackName - Track name (e.g., 'building-blocks')
  * @param {string} userId - User UUID
@@ -366,42 +367,37 @@ export async function getLastCompletedAt(supabase, userId) {
  */
 export async function getProblemsWithProgress(supabase, trackName, userId) {
 	// Get track first
-	const { data: track } = await supabase
+	const { data: track, error: trackError } = await supabase
 		.from('tracks')
 		.select('id')
 		.eq('name', trackName)
 		.single();
 
-	if (!track) return [];
+	if (trackError || !track) return [];
 
-	// Get all problems for track
+	// OPTIMIZED: Single query with LEFT JOIN instead of 3 separate queries
 	const { data: problems, error: problemsError } = await supabase
 		.from('problems')
-		.select('*')
+		.select(`
+			*,
+			user_submissions!left (
+				problem_id,
+				submitted_at,
+				bloks_earned
+			)
+		`)
 		.eq('track_id', track.id)
+		.eq('user_submissions.user_id', userId)
 		.order('sort_order');
 
 	if (problemsError) throw problemsError;
 
-	// Get user submissions
-	const { data: submissions, error: submissionsError } = await supabase
-		.from('user_submissions')
-		.select('problem_id, submitted_at, bloks_earned')
-		.eq('user_id', userId);
-
-	if (submissionsError) throw submissionsError;
-
-	// Create a map of submissions by problem_id
-	const submissionMap = {};
-	submissions?.forEach((sub) => {
-		submissionMap[sub.problem_id] = sub;
-	});
-
-	// Merge problems with completion status
+	// Transform data: user_submissions array will have 0 or 1 items
 	const problemsWithProgress = problems.map((problem) => {
-		const submission = submissionMap[problem.id];
+		const submission = problem.user_submissions?.[0];
 		return {
 			...problem,
+			user_submissions: undefined, // Remove the join data
 			isCompleted: !!submission,
 			completedAt: submission?.submitted_at || null,
 			bloksEarnedFromThis: submission?.bloks_earned || 0
