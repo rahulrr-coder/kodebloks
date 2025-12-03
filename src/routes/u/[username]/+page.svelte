@@ -69,13 +69,17 @@
 
 		<!-- Stats Overview -->
 		<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-			<div class="card text-center" in:fly={{ y: 20, duration: 500, delay: 100 }}>
+			<a 
+				href="/u/{profile?.username}/solved" 
+				class="card text-center hover:shadow-lg transition-shadow cursor-pointer" 
+				in:fly={{ y: 20, duration: 500, delay: 100 }}
+			>
 				<div class="text-amber-600 mb-2 flex justify-center">
 					<Trophy size={32} />
 				</div>
 				<div class="text-3xl font-bold text-neutral-900">{profile?.total_problems_solved || 0}</div>
 				<div class="text-sm text-neutral-600">Problems Solved</div>
-			</div>
+			</a>
 
 			<div class="card text-center" in:fly={{ y: 20, duration: 500, delay: 200 }}>
 				<div class="text-amber-600 mb-2 flex justify-center">
@@ -210,6 +214,9 @@
 		padding: 2rem;
 		box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
 		border: 1px solid rgb(229 229 229);
+		text-decoration: none;
+		color: inherit;
+		display: block;
 	}
 
 	.btn {
