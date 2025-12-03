@@ -1,14 +1,11 @@
 <script>
 	import { onMount } from 'svelte';
 	import { invalidate } from '$app/navigation';
-	import ProgressOverview from '$lib/components/tracks/ProgressOverview.svelte';
-	import FilterBar from '$lib/components/tracks/FilterBar.svelte';
-	import SectionAccordion from '$lib/components/tracks/SectionAccordion.svelte';
+	import { goto } from '$app/navigation';
+	import { BOOTCAMP_DAYS } from '$lib/config/bootcampDays.js';
+	import SectionsView from '$lib/components/tracks/SectionsView.svelte';
 	import CelebrationModal from '$lib/components/celebrations/CelebrationModal.svelte';
 	import BadgeUnlockModal from '$lib/components/celebrations/BadgeUnlockModal.svelte';
-	import CourseView from '$lib/components/tracks/CourseView.svelte';
-	import SectionsView from '$lib/components/tracks/SectionsView.svelte';
-	import { groupBySection, applyFiltersAndSort, getSectionOrder } from '$lib/utils/filterUtils.js';
 	import { canComplete as checkCooldown, formatCooldownTime } from '$lib/utils/cooldownUtils.js';
 	import { markProblemComplete, updateLastCompletedAt } from '$lib/api/submissions.js';
 	import { createSupabaseLoadClient } from '$lib/supabase.js';
@@ -18,26 +15,18 @@
 
 	export let data;
 
-	let { track, problems, stats, totalBloksEarned, lastCompletedAt, user, isCourse, groupedByDay } = data;
+	let { track, dayLabel, daySlug, problems, stats, totalBloksEarned, lastCompletedAt, user } = data;
 
-	// Filter state
-	let filters = {
-		difficulty: 'all',
-		status: 'all',
-		mustDoOnly: false,
-		sortBy: 'section'
-	};
+	// Get day metadata
+	$: dayMeta = BOOTCAMP_DAYS[dayLabel] || {};
 
 	// Cooldown state
 	let canCompleteNow = true;
 	let cooldownTimeString = '';
 	let cooldownInterval;
 	
-	// Loading state - track which specific problem is being submitted
+	// Loading state
 	let submittingProblemId = null;
-
-	// Expanded sections state
-	let expandedSections = new Set();
 
 	// Celebration modal state
 	let showCelebration = false;
@@ -48,23 +37,18 @@
 	let showBadgeModal = false;
 	let newlyEarnedBadges = [];
 
-	// Track locally completed problems (for optimistic UI updates)
+	// Track locally completed problems
 	let locallyCompletedIds = new Set();
 
-	// Reactive grouping and filtering
-	$: filteredProblems = applyFiltersAndSort(problems, filters);
-	$: groupedProblems = groupBySection(filteredProblems);
-	$: sectionOrder = getSectionOrder();
-	$: orderedSections = sectionOrder.filter((section) => groupedProblems[section]);
-
-	// Expand first section by default
-	onMount(() => {
-		if (orderedSections.length > 0) {
-			expandedSections.add(orderedSections[0]);
-			expandedSections = expandedSections;
+	// Group problems as sections (all in one section for this day)
+	$: sections = [
+		{
+			name: dayMeta.subtitle || `${dayLabel} Problems`,
+			problems: problems
 		}
+	];
 
-		// Update cooldown status
+	onMount(() => {
 		updateCooldownStatus();
 		cooldownInterval = setInterval(updateCooldownStatus, 1000);
 
@@ -78,28 +62,12 @@
 		cooldownTimeString = formatCooldownTime(lastCompletedAt);
 	}
 
-	function handleFilterChange(event) {
-		filters = event.detail;
-	}
-
-	function toggleSection(section) {
-		if (expandedSections.has(section)) {
-			expandedSections.delete(section);
-		} else {
-			expandedSections.add(section);
-		}
-		expandedSections = expandedSections;
-	}
-
 	async function handleProblemComplete(event) {
 		const problemId = event.detail;
 
-		if (submittingProblemId) {
-			return; // Prevent double submissions
-		}
-
+		if (submittingProblemId) return;
 		if (!canCompleteNow) {
-			toast.info(`⏱️ Take a quick break! You can submit again in ${cooldownTimeString}.\n\nCome back stronger! 💪`, 5000);
+			toast.info(`⏱️ Take a quick break! You can submit again in ${cooldownTimeString}.`, 5000);
 			return;
 		}
 
@@ -118,71 +86,48 @@
 				return;
 			}
 
-			// Mark problem complete and get newly earned badges
 			const result = await markProblemComplete(supabase, user.id, problemId, problem.bloks);
-
-			// Update last completion timestamp
 			await updateLastCompletedAt(supabase, user.id);
 
-			// Update local state IMMEDIATELY for instant UI feedback
 			lastCompletedAt = new Date().toISOString();
 			updateCooldownStatus();
-
-			// Track this problem as locally completed (for optimistic UI)
 			locallyCompletedIds.add(problemId);
 
-			// Update local problems array to mark this problem as completed
 			problems = problems.map(p =>
 				p.id === problemId
-					? {
-						...p,
-						isCompleted: true,
-						completedAt: new Date().toISOString(),
-						bloksEarnedFromThis: problem.bloks
-					}
+					? { ...p, isCompleted: true, completedAt: new Date().toISOString(), bloksEarnedFromThis: problem.bloks }
 					: p
 			);
 
-			// Update stats locally for instant feedback
 			stats.problemsCompleted = (stats.problemsCompleted || 0) + 1;
 			totalBloksEarned = (totalBloksEarned || 0) + problem.bloks;
 
-			// Play celebration sounds
 			playSuccessSound();
 			setTimeout(() => playCoinSound(), 200);
 
-			// Show confetti
 			celebrationConfetti({
 				particleCount: 150,
 				spread: 100,
 				colors: ['#f59e0b', '#d97706', '#14b8a6']
 			});
 
-			// Show celebration modal
 			celebrationBloks = problem.bloks;
 			celebrationProblemTitle = problem.title;
 			showCelebration = true;
 
-			// If badges were earned, show badge modal after celebration
 			if (result.newBadges && result.newBadges.length > 0) {
 				newlyEarnedBadges = result.newBadges;
-				// Delay badge modal slightly so celebration finishes first
 				setTimeout(() => {
 					playAchievementSound();
 					showBadgeModal = true;
 				}, 500);
 			}
 
-			// Refresh only specific routes that depend on user stats (faster than invalidateAll)
-			await Promise.all([
-				invalidate('/dashboard'),
-				invalidate('/leaderboard'),
-				invalidate(url => url.pathname.includes('/tracks/'))
-			]);
+			await invalidate(`/tracks/${track.name}/${daySlug}`);
 
 		} catch (error) {
 			console.error('Error marking problem complete:', error);
-			if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+			if (error.message?.includes('duplicate')) {
 				toast.info('You have already completed this problem! 🎯');
 			} else {
 				toast.error('Failed to mark problem complete. Please try again.');
@@ -201,14 +146,9 @@
 		newlyEarnedBadges = [];
 	}
 
-	// React to data changes - merge with local state
 	$: {
-		track = data.track;
-
-		// Merge server data with locally completed problems for instant UI
 		problems = data.problems.map(p => {
 			if (locallyCompletedIds.has(p.id) && !p.isCompleted) {
-				// This was completed locally but server hasn't updated yet
 				return {
 					...p,
 					isCompleted: true,
@@ -222,69 +162,59 @@
 		stats = data.stats;
 		totalBloksEarned = data.totalBloksEarned;
 		lastCompletedAt = data.lastCompletedAt;
-		user = data.user;
 		updateCooldownStatus();
 	}
 </script>
 
 <svelte:head>
-	<title>{track.name} - KodeBloks</title>
+	<title>{dayLabel} - {track.name} - KodeBloks</title>
 </svelte:head>
 
-<div class="track-page">
+<div class="day-page">
 	<!-- Back Button -->
 	<div class="back-button-container">
-		<a href="/dashboard" class="back-button">
+		<a href="/tracks/{track.name}" class="back-button">
 			<svg class="back-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M15 19l-7-7 7-7"
-				/>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
 			</svg>
-			Back to Dashboard
+			Back to {track.name}
 		</a>
 	</div>
 
-	<!-- Progress Overview -->
-	<ProgressOverview {track} {stats} {totalBloksEarned} />
-
-	{#if isCourse && groupedByDay}
-		<!-- COURSE MODE: Day-based structure -->
-		<CourseView 
-			{groupedByDay}
-			trackName={track.name}
-		/>
-	{:else}
-		<!-- REGULAR MODE: Section-based structure -->
-		<!-- Filter Bar -->
-		<FilterBar {filters} on:change={handleFilterChange} />
-
-		<!-- Sections with Problems -->
-		<div class="sections-container">
-			{#if orderedSections.length === 0}
-				<div class="empty-state">
-					<div class="empty-icon">🔍</div>
-					<h3 class="empty-title">No problems found</h3>
-					<p class="empty-description">
-						Try adjusting your filters to see more problems.
-					</p>
-				</div>
-			{:else}
-				{#each orderedSections as section}
-					<SectionAccordion
-						sectionName={section}
-						problems={groupedProblems[section]}
-						isExpanded={expandedSections.has(section)}
-						{submittingProblemId}
-						on:toggle={(e) => toggleSection(e.detail)}
-						on:complete={handleProblemComplete}
-					/>
-				{/each}
-			{/if}
+	<!-- Day Header -->
+	<div class="day-header {dayMeta.color}">
+		<div class="day-icon-large">{dayMeta.icon || '📚'}</div>
+		<div class="day-header-content">
+			<div class="day-label">{dayLabel}</div>
+			<h1 class="day-title">{dayMeta.title || dayLabel}</h1>
+			<p class="day-description">{dayMeta.subtitle || ''}</p>
 		</div>
-	{/if}
+	</div>
+
+	<!-- Progress Stats -->
+	<div class="progress-stats">
+		<div class="stat-card">
+			<div class="stat-value">{stats.problemsCompleted}/{stats.totalProblems}</div>
+			<div class="stat-label">Problems Solved</div>
+		</div>
+		<div class="stat-card">
+			<div class="stat-value">💎 {totalBloksEarned}</div>
+			<div class="stat-label">Bloks Earned</div>
+		</div>
+		<div class="stat-card">
+			<div class="stat-value">{stats.totalProblems > 0 ? Math.round((stats.problemsCompleted / stats.totalProblems) * 100) : 0}%</div>
+			<div class="stat-label">Completion</div>
+		</div>
+	</div>
+
+	<!-- Problems -->
+	<SectionsView 
+		{sections}
+		{locallyCompletedIds}
+		{submittingProblemId}
+		{canCompleteNow}
+		onProblemComplete={(problemId) => handleProblemComplete({ detail: problemId })}
+	/>
 </div>
 
 <!-- Celebration Modals -->
@@ -302,7 +232,7 @@
 />
 
 <style>
-	.track-page {
+	.day-page {
 		max-width: 1400px;
 		margin: 0 auto;
 		padding: 2rem;
@@ -332,41 +262,117 @@
 		height: 1.25rem;
 	}
 
-	.sections-container {
-		display: flex;
-		flex-direction: column;
-		gap: 1.5rem;
-	}
-
-	.empty-state {
-		text-align: center;
-		padding: 4rem 2rem;
+	.day-header {
 		background: white;
 		border-radius: 1rem;
-		border: 2px dashed #e5e7eb;
+		padding: 2.5rem;
+		margin-bottom: 2rem;
+		display: flex;
+		align-items: center;
+		gap: 2rem;
+		border: 2px solid #e5e7eb;
 	}
 
-	.empty-icon {
-		font-size: 4rem;
-		margin-bottom: 1rem;
+	.day-header.bg-blue-100 { background: linear-gradient(135deg, #dbeafe 0%, #ffffff 100%); border-color: #93c5fd; }
+	.day-header.bg-purple-100 { background: linear-gradient(135deg, #f3e8ff 0%, #ffffff 100%); border-color: #d8b4fe; }
+	.day-header.bg-green-100 { background: linear-gradient(135deg, #d1fae5 0%, #ffffff 100%); border-color: #6ee7b7; }
+	.day-header.bg-pink-100 { background: linear-gradient(135deg, #fce7f3 0%, #ffffff 100%); border-color: #f9a8d4; }
+	.day-header.bg-yellow-100 { background: linear-gradient(135deg, #fef3c7 0%, #ffffff 100%); border-color: #fde047; }
+	.day-header.bg-indigo-100 { background: linear-gradient(135deg, #e0e7ff 0%, #ffffff 100%); border-color: #a5b4fc; }
+	.day-header.bg-red-100 { background: linear-gradient(135deg, #fee2e2 0%, #ffffff 100%); border-color: #fca5a5; }
+	.day-header.bg-teal-100 { background: linear-gradient(135deg, #ccfbf1 0%, #ffffff 100%); border-color: #5eead4; }
+	.day-header.bg-orange-100 { background: linear-gradient(135deg, #ffedd5 0%, #ffffff 100%); border-color: #fdba74; }
+
+	.day-icon-large {
+		font-size: 5rem;
+		line-height: 1;
 	}
 
-	.empty-title {
-		font-size: 1.5rem;
-		font-weight: 700;
+	.day-header-content {
+		flex: 1;
+	}
+
+	.day-label {
+		font-size: 0.875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #6b7280;
+		margin-bottom: 0.5rem;
+	}
+
+	.day-title {
+		font-size: 2.5rem;
+		font-weight: 800;
 		color: #111827;
 		margin: 0 0 0.5rem 0;
+		line-height: 1.2;
 	}
 
-	.empty-description {
-		font-size: 1rem;
+	.day-description {
+		font-size: 1.125rem;
 		color: #6b7280;
 		margin: 0;
+		line-height: 1.6;
+	}
+
+	.progress-stats {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 1.5rem;
+		margin-bottom: 2rem;
+	}
+
+	.stat-card {
+		background: white;
+		border-radius: 1rem;
+		padding: 1.5rem;
+		text-align: center;
+		border: 2px solid #e5e7eb;
+		transition: all 0.2s;
+	}
+
+	.stat-card:hover {
+		border-color: #f59e0b;
+		transform: translateY(-2px);
+	}
+
+	.stat-value {
+		font-size: 2rem;
+		font-weight: 800;
+		color: #111827;
+		margin-bottom: 0.5rem;
+	}
+
+	.stat-label {
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: #6b7280;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
 	}
 
 	@media (max-width: 768px) {
-		.track-page {
+		.day-page {
 			padding: 1rem;
+		}
+
+		.day-header {
+			flex-direction: column;
+			text-align: center;
+			padding: 2rem 1.5rem;
+		}
+
+		.day-icon-large {
+			font-size: 4rem;
+		}
+
+		.day-title {
+			font-size: 2rem;
+		}
+
+		.progress-stats {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>
