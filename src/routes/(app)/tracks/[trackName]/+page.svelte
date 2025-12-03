@@ -1,6 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { invalidate } from '$app/navigation';
+	import { page } from '$app/stores';
 	import ProgressOverview from '$lib/components/tracks/ProgressOverview.svelte';
 	import FilterBar from '$lib/components/tracks/FilterBar.svelte';
 	import SectionAccordion from '$lib/components/tracks/SectionAccordion.svelte';
@@ -254,7 +255,7 @@
 		<!-- COURSE MODE: Day-based structure -->
 		<CourseView 
 			{groupedByDay}
-			trackName={track.name}
+			trackName={$page.params.trackName}
 		/>
 	{:else}
 		<!-- REGULAR MODE: Section-based structure -->
