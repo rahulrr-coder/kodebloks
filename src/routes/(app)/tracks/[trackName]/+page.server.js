@@ -1,6 +1,6 @@
 /**
  * @fileoverview Track page server-side data loading
- * THIN LAYER: Only handles routing, data loading from Supabase
+ * Supports both regular tracks and course-style tracks (grouped by days)
  */
 
 import { getTrackByName } from '$lib/api/problems.js';
@@ -20,24 +20,41 @@ export const load = async (event) => {
 	const trackName = event.params.trackName;
 
 	try {
-		// Fetch track info, problems with progress, and last completion time in parallel
-		const [track, problemsWithProgress, lastCompletedAt] = await Promise.all([
-			getTrackByName(supabase, trackName),
-			getProblemsWithProgress(supabase, trackName, user.id),
-			getLastCompletedAt(supabase, user.id)
-		]);
-
-		// If track doesn't exist, redirect to dashboard
+		// Fetch track info and problems
+		const track = await getTrackByName(supabase, trackName);
+		
 		if (!track) {
 			throw redirect(303, '/dashboard');
 		}
 
-		// Calculate stats
+		const problemsWithProgress = await getProblemsWithProgress(supabase, trackName, user.id);
+		const lastCompletedAt = await getLastCompletedAt(supabase, user.id);
+		
+		// Check if this track has day-based structure (course style)
+		const hasDayStructure = problemsWithProgress.some(p => 
+			p.section_tags && p.section_tags.some(tag => tag.startsWith('Day '))
+		);
+
+		if (hasDayStructure) {
+			// COURSE MODE: Group by days
+			const groupedByDay = groupProblemsByDay(problemsWithProgress);
+			
+			return {
+				track,
+				problems: problemsWithProgress,
+				groupedByDay,
+				stats: calculateOverallStats(problemsWithProgress),
+				totalBloksEarned: calculateTotalBloks(problemsWithProgress),
+				lastCompletedAt,
+				user,
+				isCourse: true
+			};
+		}
+
+		// REGULAR MODE: Flat list
 		const total = problemsWithProgress.length;
 		const completed = problemsWithProgress.filter((p) => p.isCompleted).length;
 		const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-		// Calculate total Bloks earned in this track
 		const totalBloksEarned = problemsWithProgress.reduce(
 			(sum, p) => sum + (p.bloksEarnedFromThis || 0),
 			0
@@ -49,10 +66,52 @@ export const load = async (event) => {
 			stats: { total, completed, percentage },
 			totalBloksEarned,
 			lastCompletedAt,
-			user
+			user,
+			isCourse: false
 		};
 	} catch (error) {
 		console.error('Error loading track data:', error);
 		throw redirect(303, '/dashboard');
 	}
 };
+
+// Group problems by Day tag
+function groupProblemsByDay(problems) {
+	const grouped = {};
+
+	problems.forEach((problem) => {
+		const dayTag = problem.section_tags?.find(tag => tag.startsWith('Day ')) || 'Extras';
+		
+		if (!grouped[dayTag]) {
+			grouped[dayTag] = [];
+		}
+		
+		grouped[dayTag].push(problem);
+	});
+
+	// Sort by day number
+	return Object.keys(grouped)
+		.sort((a, b) => {
+			const numA = parseInt(a.replace(/\D/g, '')) || 999;
+			const numB = parseInt(b.replace(/\D/g, '')) || 999;
+			return numA - numB;
+		})
+		.map(dayKey => ({
+			day: dayKey,
+			dayNumber: parseInt(dayKey.replace(/\D/g, '')) || 0,
+			problems: grouped[dayKey],
+			total: grouped[dayKey].length,
+			completed: grouped[dayKey].filter(p => p.isCompleted).length
+		}));
+}
+
+function calculateOverallStats(problems) {
+	const total = problems.length;
+	const completed = problems.filter(p => p.isCompleted).length;
+	const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+	return { total, completed, percentage };
+}
+
+function calculateTotalBloks(problems) {
+	return problems.reduce((sum, p) => sum + (p.bloksEarnedFromThis || 0), 0);
+}
