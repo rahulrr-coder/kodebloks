@@ -11,7 +11,9 @@
 <div class="progress-overview">
 	<div class="overview-header">
 		<div class="track-info">
-			<span class="track-icon">{track.icon || '📚'}</span>
+			{#if track.icon && !track.icon.toLowerCase().includes('zap')}
+				<span class="track-icon">{track.icon}</span>
+			{/if}
 			<div>
 				<h1 class="track-title">{track.display_name}</h1>
 				<p class="track-description">{track.description}</p>
