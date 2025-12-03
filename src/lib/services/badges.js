@@ -17,7 +17,7 @@ export async function checkAndAwardBadges(userId, supabaseOrEvent) {
 
 	try {
 		// Parallelize initial data fetching for faster badge checking
-		const [profileResult, trackResult, userBadgesResult] = await Promise.all([
+		const [profileResult, submissionsResult, userBadgesResult] = await Promise.all([
 			// Query 1: User profile stats
 			supabase
 				.from('user_profiles')
@@ -25,10 +25,10 @@ export async function checkAndAwardBadges(userId, supabaseOrEvent) {
 				.eq('user_id', userId)
 				.single(),
 
-			// Query 2: Track progress for difficulty counts
+			// Query 2: Get user submissions with problem difficulty for difficulty counts
 			supabase
-				.from('track_progress')
-				.select('difficulty, problems_solved')
+				.from('user_submissions')
+				.select('problems(difficulty)')
 				.eq('user_id', userId),
 
 			// Query 3: Already earned badges
@@ -46,16 +46,19 @@ export async function checkAndAwardBadges(userId, supabaseOrEvent) {
 
 		const profile = profileResult.data;
 
-		// Process track progress
-		if (trackResult.error) {
-			console.error('Error fetching track progress:', trackResult.error);
+		// Process submissions for difficulty counts
+		if (submissionsResult.error) {
+			console.error('Error fetching user submissions:', submissionsResult.error);
 		}
 
-		// Calculate difficulty counts
+		// Calculate difficulty counts from submissions
 		const difficultyCount = {};
-		if (trackResult.data) {
-			trackResult.data.forEach(track => {
-				difficultyCount[track.difficulty] = (difficultyCount[track.difficulty] || 0) + track.problems_solved;
+		if (submissionsResult.data) {
+			submissionsResult.data.forEach(submission => {
+				const difficulty = submission.problems?.difficulty;
+				if (difficulty) {
+					difficultyCount[difficulty] = (difficultyCount[difficulty] || 0) + 1;
+				}
 			});
 		}
 
