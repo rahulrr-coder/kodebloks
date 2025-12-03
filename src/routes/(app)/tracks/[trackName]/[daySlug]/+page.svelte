@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { invalidate } from '$app/navigation';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { BOOTCAMP_DAYS } from '$lib/config/bootcampDays.js';
 	import SectionsView from '$lib/components/tracks/SectionsView.svelte';
 	import CelebrationModal from '$lib/components/celebrations/CelebrationModal.svelte';
@@ -66,8 +67,9 @@
 		const problemId = event.detail;
 
 		if (submittingProblemId) return;
+		
 		if (!canCompleteNow) {
-			toast.info(`⏱️ Take a quick break! You can submit again in ${cooldownTimeString}.`, 5000);
+			toast.info(`⏱️ Take a quick break! You can submit again in ${cooldownTimeString}.\n\nCome back stronger! 💪`, 5000);
 			return;
 		}
 
@@ -173,11 +175,11 @@
 <div class="day-page">
 	<!-- Back Button -->
 	<div class="back-button-container">
-		<a href="/tracks/{track.name}" class="back-button">
+		<a href="/tracks/{$page.params.trackName}" class="back-button">
 			<svg class="back-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
 			</svg>
-			Back to {track.name}
+			Back to {track.display_name || track.name}
 		</a>
 	</div>
 
@@ -198,7 +200,7 @@
 			<div class="stat-label">Problems Solved</div>
 		</div>
 		<div class="stat-card">
-			<div class="stat-value">💎 {totalBloksEarned}</div>
+			<div class="stat-value">🧱 {totalBloksEarned}</div>
 			<div class="stat-label">Bloks Earned</div>
 		</div>
 		<div class="stat-card">
