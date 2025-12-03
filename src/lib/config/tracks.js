@@ -26,6 +26,11 @@ export const TRACK_INFO = {
 		description: 'Advanced algorithms and complex problem-solving patterns',
 		comingSoon: false
 	},
+	'dsa-bootcamp': {
+		color: 'orange',
+		description: 'Complete 9-day DSA bootcamp with structured daily learning',
+		comingSoon: false
+	},
 	'interview-essentials': {
 		color: 'green',
 		description: 'Essential patterns and questions for technical interviews',

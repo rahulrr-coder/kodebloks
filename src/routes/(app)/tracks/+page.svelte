@@ -57,6 +57,18 @@
 			urlKey: 'interview-essentials',
 			order: 3,
 			comingSoon: true
+		},
+		'dsa-bootcamp': { 
+			display: 'DSA Bootcamp', 
+			urlKey: 'dsa-bootcamp',
+			order: 4,
+			comingSoon: false
+		},
+		'dsabootcamp': { 
+			display: 'DSA Bootcamp', 
+			urlKey: 'dsa-bootcamp',
+			order: 4,
+			comingSoon: false
 		}
 	};
 	
