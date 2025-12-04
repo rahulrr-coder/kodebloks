@@ -65,9 +65,14 @@
 			expandedSections = expandedSections;
 		}
 
-		// Update cooldown status
-		updateCooldownStatus();
-		cooldownInterval = setInterval(updateCooldownStatus, 1000);
+		// Update cooldown status (disabled for dsa-bootcamp)
+		if ($page.params.trackName !== 'dsa-bootcamp') {
+			updateCooldownStatus();
+			cooldownInterval = setInterval(updateCooldownStatus, 1000);
+		} else {
+			// For dsa-bootcamp, always allow completion
+			canCompleteNow = true;
+		}
 
 		return () => {
 			if (cooldownInterval) clearInterval(cooldownInterval);
@@ -99,7 +104,8 @@
 			return; // Prevent double submissions
 		}
 
-		if (!canCompleteNow) {
+		// Cooldown check (disabled for dsa-bootcamp)
+		if ($page.params.trackName !== 'dsa-bootcamp' && !canCompleteNow) {
 			toast.info(`⏱️ Take a quick break! You can submit again in ${cooldownTimeString}.\n\nCome back stronger! 💪`, 5000);
 			return;
 		}
@@ -127,7 +133,10 @@
 
 			// Update local state IMMEDIATELY for instant UI feedback
 			lastCompletedAt = new Date().toISOString();
-			updateCooldownStatus();
+			// Update cooldown status (disabled for dsa-bootcamp)
+			if ($page.params.trackName !== 'dsa-bootcamp') {
+				updateCooldownStatus();
+			}
 
 			// Track this problem as locally completed (for optimistic UI)
 			locallyCompletedIds.add(problemId);
@@ -224,7 +233,10 @@
 		totalBloksEarned = data.totalBloksEarned;
 		lastCompletedAt = data.lastCompletedAt;
 		user = data.user;
-		updateCooldownStatus();
+		// Update cooldown status (disabled for dsa-bootcamp)
+		if ($page.params.trackName !== 'dsa-bootcamp') {
+			updateCooldownStatus();
+		}
 	}
 </script>
 
