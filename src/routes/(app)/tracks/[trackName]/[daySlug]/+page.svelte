@@ -44,6 +44,10 @@
 
 	// Track locally completed problems
 	let locallyCompletedIds = new Set();
+	
+	// Track local stat increases for optimistic UI
+	let localStatsIncrease = 0;
+	let localBloksIncrease = 0;
 
 	// Group problems as sections (all in one section for this day)
 	$: sections = [
@@ -129,8 +133,9 @@
 					: p
 			);
 
-			stats.problemsCompleted = (stats.problemsCompleted || 0) + 1;
-			totalBloksEarned = (totalBloksEarned || 0) + problem.bloks;
+			// Track local increases for optimistic UI
+			localStatsIncrease += 1;
+			localBloksIncrease += problem.bloks;
 
 			playSuccessSound();
 			setTimeout(() => playCoinSound(), 200);
@@ -189,8 +194,12 @@
 			return p;
 		});
 
-		stats = data.stats;
-		totalBloksEarned = data.totalBloksEarned;
+		// Merge server data with local optimistic updates
+		stats = {
+			...data.stats,
+			problemsCompleted: (data.stats?.problemsCompleted || 0) + localStatsIncrease
+		};
+		totalBloksEarned = (data.totalBloksEarned || 0) + localBloksIncrease;
 		lastCompletedAt = data.lastCompletedAt;
 		todayCompletions = data.todayCompletions || 0;
 		
