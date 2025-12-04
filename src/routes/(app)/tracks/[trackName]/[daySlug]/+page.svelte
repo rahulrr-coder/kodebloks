@@ -8,6 +8,7 @@
 	import CelebrationModal from '$lib/components/celebrations/CelebrationModal.svelte';
 	import BadgeUnlockModal from '$lib/components/celebrations/BadgeUnlockModal.svelte';
 	import { canComplete as checkCooldown, formatCooldownTime } from '$lib/utils/cooldownUtils.js';
+	import { canCompleteToday, getRemainingProblems, formatDailyLimitMessage } from '$lib/utils/dailyLimitUtils.js';
 	import { markProblemComplete, updateLastCompletedAt } from '$lib/api/submissions.js';
 	import { createSupabaseLoadClient } from '$lib/supabase.js';
 	import { toast } from '$lib/stores/toast.js';
@@ -16,7 +17,10 @@
 
 	export let data;
 
-	let { track, dayLabel, daySlug, problems, stats, totalBloksEarned, lastCompletedAt, user } = data;
+	let { track, dayLabel, daySlug, problems, stats, totalBloksEarned, lastCompletedAt, todayCompletions = 0, user } = data;
+
+	// Daily limit for DSA bootcamp
+	const DSA_BOOTCAMP_DAILY_LIMIT = 20;
 
 	// Get day metadata
 	$: dayMeta = BOOTCAMP_DAYS[dayLabel] || {};
@@ -50,8 +54,14 @@
 	];
 
 	onMount(() => {
-		updateCooldownStatus();
-		cooldownInterval = setInterval(updateCooldownStatus, 1000);
+		// Update cooldown status (disabled for dsa-bootcamp)
+		if ($page.params.trackName !== 'dsa-bootcamp') {
+			updateCooldownStatus();
+			cooldownInterval = setInterval(updateCooldownStatus, 1000);
+		} else {
+			// For dsa-bootcamp, always allow completion
+			canCompleteNow = true;
+		}
 
 		return () => {
 			if (cooldownInterval) clearInterval(cooldownInterval);
@@ -68,9 +78,19 @@
 
 		if (submittingProblemId) return;
 		
-		if (!canCompleteNow) {
-			toast.info(`⏱️ Take a quick break! You can submit again in ${cooldownTimeString}.\n\nCome back stronger! 💪`, 5000);
-			return;
+		// For DSA bootcamp: Check daily limit instead of cooldown
+		if ($page.params.trackName === 'dsa-bootcamp') {
+			if (!canCompleteToday(todayCompletions, DSA_BOOTCAMP_DAILY_LIMIT)) {
+				const message = formatDailyLimitMessage(0);
+				toast.info(`🎯 ${message}\n\nRest up and return tomorrow! 💪`, 5000);
+				return;
+			}
+		} else {
+			// For other tracks: Check cooldown
+			if (!canCompleteNow) {
+				toast.info(`⏱️ Take a quick break! You can submit again in ${cooldownTimeString}.\n\nCome back stronger! 💪`, 5000);
+				return;
+			}
 		}
 
 		const problem = problems.find((p) => p.id === problemId);
@@ -92,7 +112,15 @@
 			await updateLastCompletedAt(supabase, user.id);
 
 			lastCompletedAt = new Date().toISOString();
-			updateCooldownStatus();
+			
+			// Update cooldown status (disabled for dsa-bootcamp)
+			if ($page.params.trackName !== 'dsa-bootcamp') {
+				updateCooldownStatus();
+			} else {
+				// For DSA bootcamp, increment today's completion count
+				todayCompletions += 1;
+			}
+			
 			locallyCompletedIds.add(problemId);
 
 			problems = problems.map(p =>
@@ -164,7 +192,12 @@
 		stats = data.stats;
 		totalBloksEarned = data.totalBloksEarned;
 		lastCompletedAt = data.lastCompletedAt;
-		updateCooldownStatus();
+		todayCompletions = data.todayCompletions || 0;
+		
+		// Update cooldown status (disabled for dsa-bootcamp)
+		if ($page.params.trackName !== 'dsa-bootcamp') {
+			updateCooldownStatus();
+		}
 	}
 </script>
 

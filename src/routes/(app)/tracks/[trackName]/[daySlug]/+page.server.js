@@ -4,7 +4,7 @@
  */
 
 import { getTrackByName } from '$lib/api/problems.js';
-import { getProblemsWithProgress, getLastCompletedAt } from '$lib/api/submissions.js';
+import { getProblemsWithProgress, getLastCompletedAt, getTodayCompletionCount } from '$lib/api/submissions.js';
 import { redirect } from '@sveltejs/kit';
 import { createSupabaseServerClient } from '$lib/supabase.js';
 
@@ -83,6 +83,12 @@ export const load = async (event) => {
 
 		// Get last completed timestamp for cooldown
 		const lastCompletedAt = await getLastCompletedAt(supabase, user.id);
+		
+		// For DSA bootcamp, get today's completion count (daily limit: 20)
+		let todayCompletions = 0;
+		if (trackName === 'dsa-bootcamp') {
+			todayCompletions = await getTodayCompletionCount(supabase, user.id, track.id);
+		}
 
 		return {
 			track,
@@ -92,6 +98,7 @@ export const load = async (event) => {
 			stats,
 			totalBloksEarned,
 			lastCompletedAt,
+			todayCompletions,
 			user
 		};
 	} catch (err) {

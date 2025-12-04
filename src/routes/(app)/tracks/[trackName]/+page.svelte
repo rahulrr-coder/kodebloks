@@ -11,6 +11,7 @@
 	import SectionsView from '$lib/components/tracks/SectionsView.svelte';
 	import { groupBySection, applyFiltersAndSort, getSectionOrder } from '$lib/utils/filterUtils.js';
 	import { canComplete as checkCooldown, formatCooldownTime } from '$lib/utils/cooldownUtils.js';
+	import { canCompleteToday, getRemainingProblems, formatDailyLimitMessage } from '$lib/utils/dailyLimitUtils.js';
 	import { markProblemComplete, updateLastCompletedAt } from '$lib/api/submissions.js';
 	import { createSupabaseLoadClient } from '$lib/supabase.js';
 	import { toast } from '$lib/stores/toast.js';
@@ -19,7 +20,10 @@
 
 	export let data;
 
-	let { track, problems, stats, totalBloksEarned, lastCompletedAt, user, isCourse, groupedByDay } = data;
+	let { track, problems, stats, totalBloksEarned, lastCompletedAt, todayCompletions = 0, user, isCourse, groupedByDay } = data;
+
+	// Daily limit for DSA bootcamp
+	const DSA_BOOTCAMP_DAILY_LIMIT = 20;
 
 	// Filter state
 	let filters = {
@@ -104,10 +108,19 @@
 			return; // Prevent double submissions
 		}
 
-		// Cooldown check (disabled for dsa-bootcamp)
-		if ($page.params.trackName !== 'dsa-bootcamp' && !canCompleteNow) {
-			toast.info(`⏱️ Take a quick break! You can submit again in ${cooldownTimeString}.\n\nCome back stronger! 💪`, 5000);
-			return;
+		// For DSA bootcamp: Check daily limit instead of cooldown
+		if ($page.params.trackName === 'dsa-bootcamp') {
+			if (!canCompleteToday(todayCompletions, DSA_BOOTCAMP_DAILY_LIMIT)) {
+				const message = formatDailyLimitMessage(0);
+				toast.info(`🎯 ${message}\n\nRest up and return tomorrow! 💪`, 5000);
+				return;
+			}
+		} else {
+			// For other tracks: Check cooldown
+			if (!canCompleteNow) {
+				toast.info(`⏱️ Take a quick break! You can submit again in ${cooldownTimeString}.\n\nCome back stronger! 💪`, 5000);
+				return;
+			}
 		}
 
 		const problem = problems.find((p) => p.id === problemId);
@@ -133,9 +146,13 @@
 
 			// Update local state IMMEDIATELY for instant UI feedback
 			lastCompletedAt = new Date().toISOString();
+			
 			// Update cooldown status (disabled for dsa-bootcamp)
 			if ($page.params.trackName !== 'dsa-bootcamp') {
 				updateCooldownStatus();
+			} else {
+				// For DSA bootcamp, increment today's completion count
+				todayCompletions += 1;
 			}
 
 			// Track this problem as locally completed (for optimistic UI)
@@ -232,6 +249,7 @@
 		stats = data.stats;
 		totalBloksEarned = data.totalBloksEarned;
 		lastCompletedAt = data.lastCompletedAt;
+		todayCompletions = data.todayCompletions || 0;
 		user = data.user;
 		// Update cooldown status (disabled for dsa-bootcamp)
 		if ($page.params.trackName !== 'dsa-bootcamp') {

@@ -358,6 +358,44 @@ export async function getLastCompletedAt(supabase, userId) {
 }
 
 /**
+ * Get user's completion count for today (for a specific track)
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabase - Supabase client instance
+ * @param {string} userId - User UUID
+ * @param {string} trackId - Track UUID
+ * @returns {Promise<number>} Number of problems completed today
+ */
+export async function getTodayCompletionCount(supabase, userId, trackId) {
+	try {
+		// Get start of today in UTC
+		const today = new Date();
+		today.setUTCHours(0, 0, 0, 0);
+		const todayStr = today.toISOString();
+
+		const { data, error } = await supabase
+			.from('user_submissions')
+			.select('id', { count: 'exact', head: false })
+			.eq('user_id', userId)
+			.gte('submitted_at', todayStr)
+			.in('problem_id', 
+				supabase
+					.from('problems')
+					.select('id')
+					.eq('track_id', trackId)
+			);
+
+		if (error) {
+			console.warn('Error fetching today completion count:', error);
+			return 0;
+		}
+
+		return data?.length || 0;
+	} catch (err) {
+		console.warn('Error calculating today completion count:', err);
+		return 0;
+	}
+}
+
+/**
  * Get problems with user's completion status
  * OPTIMIZED: Uses single query with LEFT JOIN for better performance
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase - Supabase client instance

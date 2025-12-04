@@ -4,7 +4,7 @@
  */
 
 import { getTrackByName } from '$lib/api/problems.js';
-import { getProblemsWithProgress, getLastCompletedAt } from '$lib/api/submissions.js';
+import { getProblemsWithProgress, getLastCompletedAt, getTodayCompletionCount } from '$lib/api/submissions.js';
 import { redirect } from '@sveltejs/kit';
 import { createSupabaseServerClient } from '$lib/supabase.js';
 
@@ -30,6 +30,12 @@ export const load = async (event) => {
 		const problemsWithProgress = await getProblemsWithProgress(supabase, trackName, user.id);
 		const lastCompletedAt = await getLastCompletedAt(supabase, user.id);
 		
+		// For DSA bootcamp, get today's completion count (daily limit: 20)
+		let todayCompletions = 0;
+		if (trackName === 'dsa-bootcamp') {
+			todayCompletions = await getTodayCompletionCount(supabase, user.id, track.id);
+		}
+		
 		// Check if this track has day-based structure (course style)
 		const hasDayStructure = problemsWithProgress.some(p => 
 			p.section_tags && p.section_tags.some(tag => tag.startsWith('Day '))
@@ -46,6 +52,7 @@ export const load = async (event) => {
 				stats: calculateOverallStats(problemsWithProgress),
 				totalBloksEarned: calculateTotalBloks(problemsWithProgress),
 				lastCompletedAt,
+				todayCompletions,
 				user,
 				isCourse: true
 			};
@@ -66,6 +73,7 @@ export const load = async (event) => {
 			stats: { total, completed, percentage },
 			totalBloksEarned,
 			lastCompletedAt,
+			todayCompletions,
 			user,
 			isCourse: false
 		};
